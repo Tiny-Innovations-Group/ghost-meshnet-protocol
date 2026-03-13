@@ -82,6 +82,19 @@ The primary engineering challenge of GMP is timing. We have two LoRa transceiver
 > **Call for Review:** We are specifically looking for feedback on using the RP2040's PIO state machines to manage the SPI chip-select (CS) contention between the two radios to prevent dropped packets during high-traffic bursts. See `/docs/spi_arbitration.md`.
 
 ---
+Section X: Asynchronous Onion Routing (DTN)
+GMP implements a 3-hop Onion Routing protocol designed strictly for Delay Tolerant Networking (DTN). To comply with Ofcom/FCC ISM band duty cycles (e.g., 1%), GMP does not guarantee real-time delivery.
+
+The Store-and-Forward Architecture:
+
+Static Egress Hoarding: When a node peels a layer of an Onion packet, the resulting ciphertext is placed into a pre-allocated static Egress_Queue (Maximum 20 packets).
+
+Duty Cycle State Machine: The RP2040 actively tracks its cumulative "Time on Air" (ToA). If the 1% limit is approached, the Egress_Queue pauses transmission. Packets are held in SRAM until the rolling hour window permits transmission.
+
+Out-of-Band Coordination: To minimize ToA on the 868MHz data band, nodes use the 433MHz control band to negotiate burst-transmission windows. A node will hoard multiple routed packets and transmit them in a single, high-speed Spreading Factor 7 (SF7) burst, acting as a "lightning shuffle" to clear its static memory queues legally.
+
+Queue Exhaustion: If the static Egress_Queue fills up (20/20 slots) due to duty cycle limits or network congestion, the node will broadcast a "Choked" flag on the 433MHz band, instructing neighboring nodes to route Onions elsewhere.
+---
 
 ## 6. Contributing & Governance
 
