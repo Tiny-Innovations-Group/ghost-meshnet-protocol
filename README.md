@@ -24,26 +24,28 @@ GMP is designed for low-SWaP (Size, Weight, and Power) deployments using accessi
 * **Microcontroller:** 1x Raspberry Pi Pico (RP2040) - Chosen for its deterministic dual-core architecture and PIO (Programmable I/O) capabilities to handle dual SPI buses.
 * **Radio A (Control/Key Channel):** 1x Heltec LoRa Node (433MHz) - High penetration, long-range band dedicated exclusively to Double Ratchet key exchanges and network topology metadata.
 * **Radio B (Data Channel):** 1x Heltec LoRa Node (868MHz or 915MHz ISM) - Higher bandwidth channel dedicated exclusively to AES-GCM encrypted data payloads.
+* **Radio C (Local Admin):** Built-in 2.4GHz BLE - Used strictly for initial node setup and local message injection via smartphone. **Disabled during tactical deployment.**
 * **Power:** Solar charge controller + rechargeable AA (NiMH) battery array.
 
 ---
 
-## 3. The "Zero-Heap" SRAM Memory Map
+## 3. The "Quarantined Heap" SRAM Memory Map
 
-To guarantee that a Ghost node will never crash due to memory fragmentation, the C++ standard library heap is strictly disabled at the compiler level (`-fno-exceptions -fno-rtti`).
+GMP does not ban the heap entirely; it quarantines it. We acknowledge that foundational libraries (`RadioLib`, `libsodium`) and the 2.4GHz Bluetooth stack require dynamic allocation. 
 
-The RP2040 provides **264 KB of SRAM**. GMP maps every required byte at compile-time. If a queue fills up, subsequent packets are dropped, but the node remains stable.
+However, **all GMP protocol routing, queues, and cryptographic states are strictly statically allocated.** Once the BLE config is disabled and the node enters "Mesh Mode," heap activity drops to near zero, preventing long-term fragmentation.
 
 | Section | Allocation Strategy | Size (KB) | Description |
 | --- | --- | --- | --- |
 | **.bss / .data** | Static System Globals | ~12.0 | RTOS/Scheduler overhead, hardware HAL states, and peripheral buffers. |
-| **Radio A (433MHz) RX/TX** | Fixed Array (10 slots) | 2.5 | Queue for incoming/outgoing Diffie-Hellman handshakes (max 255 bytes each). |
-| **Radio B (836MHz) RX/TX** | Fixed Array (20 slots) | 5.1 | Queue for AES-GCM data payloads. |
-| **Crypto Key Ring** | Fixed Ring Buffer (50 slots) | 25.0 | Pre-allocated Double Ratchet conversation states. The 51st state overwrites the oldest (LRU). |
-| **Mesh Routing Table** | Fixed Struct Array (100 slots) | 5.0 | Known node IDs, public keys, and next-hop MAC addresses. |
+| **Radio A (433MHz)** | Fixed Array (10 slots) | 2.5 | Queue for incoming/outgoing Diffie-Hellman handshakes (max 255 bytes each). |
+| **Radio B (836MHz)** | Fixed Array (20 slots) | 5.1 | Queue for AES-GCM data payloads. |
+| **Crypto Key Ring** |  Fixed Ring Buffer (50 slots) | 25.0 | 50 pre-allocated Double Ratchet conversation states. The 51st overwrites the oldest (LRU). |
+| **Routing Table** | Fixed Struct Array (100 slots)| 5.0 | 100 known node IDs, public keys, and next-hop MAC addresses. |
 | **CPU Call Stack** | Core 0 & Core 1 Stacks | 16.0 | Pre-calculated stack depth to prevent overflow during crypto operations. |
-| **RESERVED** | Unmapped | **~198.4** | Left completely empty for future protocol expansion. |
-| **Heap (`malloc`)** | **DISABLED** | **0.0** | **Strictly prohibited.** |
+| **Quarantined Heap** | Dynamic (`malloc`) | 50.0 | Strictly reserved for `RadioLib` init, `libsodium` contexts, and the BLE stack. |
+| **RESERVED** | Unmapped | **~148.4** | Left completely empty for future protocol expansion. |
+
 
 ---
 
@@ -82,6 +84,17 @@ The primary engineering challenge of GMP is timing. We have two LoRa transceiver
 > **Call for Review:** We are specifically looking for feedback on using the RP2040's PIO state machines to manage the SPI chip-select (CS) contention between the two radios to prevent dropped packets during high-traffic bursts. See `/docs/spi_arbitration.md`.
 
 ---
+
+## 6. Asynchronous Onion Routing (DTN)
+
+GMP implements a 3-hop Onion Routing protocol designed strictly for Delay Tolerant Networking (DTN). To comply with Ofcom/FCC ISM band duty cycles (e.g., 1%), GMP does not guarantee real-time delivery.
+
+**The Store-and-Forward Architecture:**
+1. **Static Egress Hoarding:** When a node peels a layer of an Onion packet, the resulting ciphertext is placed into the statically allocated `Egress_Queue`.
+2. **Duty Cycle State Machine:** The RP2040 actively tracks its cumulative "Time on Air" (ToA). If the 1% limit is approached, the `Egress_Queue` pauses transmission. 
+3. **Out-of-Band Coordination:** To minimize ToA on the 868MHz data band, nodes use the 433MHz control band to negotiate burst-transmission windows. A node will hoard routed packets and transmit them in a single, high-speed Spreading Factor 7 (SF7) burst (a "lightning shuffle") to clear its static memory legally.
+4. **Queue Exhaustion:** If the `Egress_Queue` fills up (20/20 slots) due to duty cycle limits, the node broadcasts a "Choked" flag on 433MHz, instructing neighbors to route elsewhere.
+
 Section X: Asynchronous Onion Routing (DTN)
 GMP implements a 3-hop Onion Routing protocol designed strictly for Delay Tolerant Networking (DTN). To comply with Ofcom/FCC ISM band duty cycles (e.g., 1%), GMP does not guarantee real-time delivery.
 
