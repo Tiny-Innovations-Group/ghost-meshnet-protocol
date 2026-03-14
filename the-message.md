@@ -53,6 +53,7 @@ In the `gmp_data_frame.ksy` definition, the payload is defined simply as a 6-bit
     repeat: expr
     repeat-expr: payload_length_chars
     doc: The tactical text, packed tightly across byte boundaries
+```
 
 The auto-generated C++ code will map these 6-bit chunks directly into statically allocated arrays on the RP2040.
 4. Pros, Cons, and Tactical Realities
