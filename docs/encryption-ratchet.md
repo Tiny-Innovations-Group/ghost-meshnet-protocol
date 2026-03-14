@@ -88,3 +88,43 @@ seq:
     doc: Network time synchronization
 
 ```
+
+## 4. Hardware Root of Trust: The "Fox Hunt" Defense
+
+A critical vulnerability in standard mesh networks is "software cloning." If an adversary hacks a node or compromises the companion app, they can copy the Private Keys to another device, allowing them to impersonate the user or decrypt intercepted traffic remotely.
+
+GMP eliminates software cloning by enforcing a **Hardware Root of Trust** via Physically Unclonable Functions (PUF) or Smartphone Secure Enclaves.
+
+### The Mechanism
+The long-term Identity Key of a GMP node is not stored in standard readable memory. 
+* **Mobile Clients:** The Identity Key is generated inside the smartphone's Secure Enclave (iOS) or TrustZone/Titan M (Android). The private key cannot be extracted by the OS.
+* **Autonomous Nodes:** The RP2040 generates its Identity Key using an SRAM PUF (Physically Unclonable Function)—leveraging the microscopic, unique silicon variations of the chip's memory at boot-up to seed the cryptography.
+
+### The 433MHz Ed25519 Signature
+Because GMP utilizes a Dual-Band architecture, the 433MHz Control Channel has the payload capacity to support robust hardware verification without clogging the 868MHz data plane.
+
+Every 433MHz Discovery Beacon includes a 64-byte Ed25519 signature generated directly by the hardware enclave.
+When Node B receives Node A's beacon, it verifies the signature. 
+
+### The Tactical Result: Forced Physical Proximity
+By mathematically fusing the network identity to the physical silicon, GMP forces adversaries to change their attack vector. A remote software hack is no longer sufficient to break the cryptography. 
+
+To impersonate a node or decrypt a captured Onion payload, an adversary must physically possess the exact hardware chip used to initialize the Ratchet. They cannot do this from across the world; they must execute a radio direction-finding "Fox Hunt" to physically locate and steal the node in the field.
+
+
+## 5. The "One Device, One Identity" Doctrine
+
+Standard communication platforms prioritize user convenience, allowing a single account identity to be synced across multiple devices (phones, tablets, laptops). This requires exporting private keys or relying on central servers, creating massive attack surfaces.
+
+The Ghost Meshnet Protocol (GMP) strictly enforces a **"One Device, One Identity"** doctrine. 
+
+By deriving the long-term Identity Key exclusively from the Physically Unclonable Function (PUF) or the Secure Enclave of the specific hardware initiating the connection, the identity becomes immutably bound to that exact piece of silicon.
+
+### The "Two Alices" Scenario
+If a user ("Alice") operates two different smartphones and connects both to a GMP node, the network will perceive them as two entirely distinct cryptographic entities (Alice_A and Alice_B).
+
+* **No Cross-Device Syncing:** A message encrypted for Alice's primary phone cannot be decrypted by her secondary phone, even if connected to the same RP2040 node. The private key never leaves the specific hardware enclave it was generated in. 
+* **Cryptographic Quarantine:** This intentional friction prevents software cloning. If an adversary compromises Alice's primary phone, they cannot export her identity to a server farm to decrypt intercepted historical traffic.
+* **Tactical Signaling:** If a user loses their primary device and switches to a backup, they must establish new Double Ratchet sessions (via the 433MHz X3DH exchange) with their contacts. This sudden change in cryptographic identity acts as a passive alert to the network that the original hardware may be compromised.
+
+In GMP, ease of access is deliberately sacrificed to guarantee the physical containment of cryptographic material.
