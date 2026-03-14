@@ -68,3 +68,30 @@ The Trade-offs (Cons)
 Handling text is rarely viewed as a "hardware constraint" in modern software development. However, in the Ghost Meshnet Protocol, text is treated as a physical payload weight.
 By aggressively abandoning standard ASCII and enforcing a 6-bit tactical alphabet, we ensure that the cryptographic headers (Double Ratchet MACs) and Onion Routing instructions have the physical radio space they need to function legally and securely across the mesh.
 
+7. Optimizing Text: Static Huffman & The 2.4GHz Client
+In a Delay Tolerant Network (DTN) constrained by strict legal duty cycles (e.g., 1%), the primary architectural goal is to hoard as many messages as possible in the node's statically allocated Egress_Queue. To achieve this, GMP aggressively compresses text before it is encrypted and injected into the mesh.
+Instead of relying on dynamic compression algorithms like GZIP (which require dynamic heap memory and actually bloat small payloads with dictionary overhead) or SMAZ (which fails to compress tactical abbreviations), GMP utilizes a Static Huffman Dictionary.
+7.1 The Static Huffman Approach
+Huffman coding replaces fixed-length characters (like 8-bit ASCII) with variable-length bit sequences based on frequency. The most common letters get the shortest codes.
+To guarantee maximum compression without using a single byte of dynamic memory on the RP2040, GMP employs a pre-computed Static Huffman tree:
+ * Tactical Training Data: The Huffman tree is not trained on standard English literature. It is trained on a custom corpus of military brevity codes, geographic coordinates, and "00s SMS slang" (e.g., SND, HLP, ASAP, LOC, SITREP).
+ * Hardcoded Dictionary: This specific, highly optimized tree is hardcoded into the client application and the Kaitai Struct (.ksy) protocol definition. Because the exact same dictionary is shared globally across every node in the mesh, the dictionary itself never needs to be transmitted over the air.
+7.2 Execution Architecture: The 2.4GHz Client Offload
+Crucially, the RP2040 microcontroller does not perform the text compression. Forcing the Pi Pico to compress text would waste valuable CPU cycles and battery life.
+Instead, the compression pipeline is offloaded entirely to the user's smartphone via the 2.4GHz BLE Admin Channel.
+The lifecycle of a message looks like this:
+ * Input Constraint: The user types a message into the GMP companion app. The app keyboard physically restricts input to the allowed 64-character tactical alphabet.
+ * Client-Side Compression: The smartphone app applies the Static Huffman algorithm, converting the text string into a highly dense bitstream.
+ * Client-Side Encryption: The app encrypts that bitstream using libsodium and the current Double Ratchet message key.
+ * Node Injection: The phone sends this finalized, encrypted binary blob over the 2.4GHz BLE link to the RP2040.
+ * Dumb Routing: The RP2040 receives the blob. It does not decompress or decrypt it. It simply places the dense byte-array into its static Egress_Queue to wait for the next 868MHz transmission window.
+7.3 Example: The Space-Saving Math
+Let's look at the compounding benefits of this approach on a standard tactical message:
+SND HLP 2 SECTOR 7 ASAP. HOSTILE DRONES SPOTTED. OUT. (53 characters)
+ * Standard ASCII (8-bit): 53 chars * 8 bits = 424 bits = 53 bytes.
+ * GMP Base 6-bit Alphabet: If we just packed our custom 64-character alphabet without Huffman: 53 chars * 6 bits = 318 bits = ~40 bytes.
+ * GMP Static Huffman (Tactical Tree): Because letters like 'S', 'T', 'E', and 'Space' are extremely common in our tactical training data, the tree assigns them incredibly short 2-bit or 3-bit codes. Rare punctuation might get 7-bit codes. The average bit-length drops to roughly ~4.5 bits per character.
+   * 53 chars * ~4.5 bits = 238 bits = ~30 bytes.
+The Result: We take a 53-byte ASCII message and shrink it to roughly 30 bytes before encryption. By saving 23 bytes per message, a statically allocated 5.1 KB Egress_Queue on the Pi Pico can hold nearly twice as many Onion-routed packets. This drastically increases the network's overall throughput and resilience without violating the "Zero-Heap" architecture.
+
+
