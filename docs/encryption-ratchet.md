@@ -3,7 +3,7 @@
 In standard mesh networks (like Meshtastic), routing instructions, public key exchanges, and encrypted text messages all fight for space on a single radio frequency. This causes massive channel congestion and forces compromises on packet size and security.
 
 The Ghost Meshnet Protocol (GMP) solves this by adopting a **Dual-Band Architecture**, separating the Control Plane from the Data Plane:
-* **The Data Plane (868MHz/915MHz):** Strictly reserved for high-speed, 124-byte, mathematically rigid Onion-routed payloads. It never transmits public keys or plaintext metadata.
+* **The Data Plane (868MHz/915MHz):** Strictly reserved for high-speed, 112-byte, mathematically rigid Onion-routed payloads. It never transmits public keys or plaintext metadata.
 * **The Control Plane (433MHz):** A slow, long-range channel dedicated entirely to node discovery, cryptographic key exchange, and air-traffic coordination.
 
 By offloading the "messy" variable-length cryptography to the 433MHz band, we keep the 868MHz data band pristine and optimized for the 1% legal duty cycle.
@@ -44,7 +44,7 @@ Once Alice and Dave both calculate the Shared Secret, the X3DH handshake is comp
 They feed that Shared Secret into the **Double Ratchet Algorithm**.
 1. Alice uses the Ratchet to generate `Message_Key_1`.
 2. She encrypts her text message using `Message_Key_1`.
-3. She builds the perfectly padded 124-byte Onion packet and blasts it over the **868MHz Data Band**.
+3. She builds the perfectly padded 112-byte Onion packet and blasts it over the **868MHz Data Band**.
 4. Dave receives the 868MHz packet, uses his Ratchet to generate `Message_Key_1`, and decrypts it.
 5. Both nodes instantly delete `Message_Key_1` and ratchet forward to `Message_Key_2`.
 
@@ -52,42 +52,29 @@ They feed that Shared Secret into the **Double Ratchet Algorithm**.
 
 Beyond key exchanges, the 433MHz channel acts as the "Air Traffic Controller" to ensure the high-speed 868MHz bursts do not collide in mid-air.
 
-Before Node A fires its 248-byte Dual-Relay Burst on 868MHz, it must ensure the local airspace is clear. Standard Carrier-Sense Multiple Access (CSMA) is unreliable on LoRa due to the "hidden node" problem and signals below the noise floor.
+Before Node A fires its 224-byte Dual-Relay Burst on 868MHz, it must ensure the local airspace is clear. Standard Carrier-Sense Multiple Access (CSMA) is unreliable on LoRa due to the "hidden node" problem and signals below the noise floor.
 
 **The "Clear to Burst" Coordination:**
 1. **The RTS (Request to Send):** Node A broadcasts a tiny, 8-byte packet on 433MHz: `[Target_ID] + [Intent_to_Burst_in_500ms]`.
 2. **The Wake-Up:** The intended receiver (Node B) hears this on 433MHz. It immediately wakes up its 868MHz radio chip, preparing the FIFO buffer to receive the massive influx of data.
 3. **The Silence:** Other nodes in the area hear the 433MHz RTS. They mathematically back off and pause their own 868MHz transmission queues to prevent a collision.
-4. **The Burst:** 500ms later, Node A fires the 248-byte Onion packet on 868MHz into a perfectly quiet RF environment, directly to an awake receiver.
+4. **The Burst:** 500ms later, Node A fires the 224-byte Dual-Relay Burst on 868MHz into a perfectly quiet RF environment, directly to an awake receiver.
 
-## 3. Kaitai Struct (`.ksy`) Implementation Example
+## 3. Kaitai Struct (`.ksy`) Implementation
 
-Because the 433MHz channel handles variable control data (unlike the rigidly fixed 868MHz band), we define specific packet types in Kaitai.
+The 433MHz Discovery Beacon, X3DH handshake packets, and RTS/CTS frames all share a single unified 104-byte layout defined by [`specs/gmp_433_beacon.ksy`](../specs/gmp_433_beacon.ksy). The frame type is carried in the 4-bit `control_type` field at the top of the unified header, so `discovery_beacon`, `x3dh_handshake_init`, `x3dh_handshake_response`, `rts_request_to_send`, and `cts_clear_to_send` are all valid decodings of the same wire structure.
 
-Here is the definition for the Phase 1 Discovery Beacon (`gmp_433_beacon.ksy`):
+The canonical `control_type_enum` values:
 
-```yaml
-meta:
-  id: gmp_433_beacon
-  endian: le
-seq:
-  - id: packet_type
-    type: u1
-    doc: Hex flag defining this as a Beacon (e.g., 0xFF)
-  - id: sender_node_id
-    type: u4
-    doc: 32-bit globally unique Node ID
-  - id: public_identity_key
-    size: 32
-    doc: Curve25519 Public Key for X3DH initialization
-  - id: battery_status
-    type: u1
-    doc: Node health diagnostic (0-100)
-  - id: epoch_timestamp
-    type: u4
-    doc: Network time synchronization
+| Value | Meaning |
+| --- | --- |
+| `0b0000` | `discovery_beacon` |
+| `0b0001` | `x3dh_handshake_init` |
+| `0b0010` | `x3dh_handshake_response` |
+| `0b0011` | `rts_request_to_send` |
+| `0b0100` | `cts_clear_to_send` |
 
-```
+Every 433MHz frame also carries a 24-bit `epoch_minutes` timestamp (minutes since Jan 1 2024, ~32 years of rollover protection) for anti-replay, a 4-bit `power_state` enum for routing decisions, and a 64-byte Ed25519 `hardware_signature` generated directly by the node's PUF or Secure Enclave — see [`SPECIFICATION.md`](../SPECIFICATION.md) §1 for the full byte layout and enum tables.
 
 ## 4. Hardware Root of Trust: The "Fox Hunt" Defense
 
