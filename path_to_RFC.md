@@ -31,10 +31,13 @@ wave of reviewer comments.
 | --- | --- | --- |
 | `specs/*.ksy` | Wire format (machine-readable) | ✅ Done |
 | `SPECIFICATION.md` | Human-readable wire spec + ToA math | ✅ Done |
+| `SECURITY.md` | Vulnerability disclosure policy | ✅ Done (#13) |
 | `docs/flow-spec.md` | End-to-end state machine + scenarios | ❌ **#14 — centrepiece deliverable** |
 | `tools/generate_packet.py` | Known-good fixture generator | ❌ #15 |
 | `docs/spi_arbitration.md` | The specific RP2040 dual-SPI question | ❌ #16 |
-| `SECURITY.md` | Vulnerability disclosure policy | ❌ #13 |
+| `THREAT_MODEL.md` | Named adversary tiers + explicit out-of-scope | ❌ #19 |
+| `DESIGN_RATIONALE.md` | Why 112 B, why AES-GCM, why 433/868 split, etc. | ❌ #20 |
+| `docs/prior-art.md` | Honest comparison: Reticulum, Meshtastic, Briar, Berty | ❌ #21 |
 
 Everything else in the repo is **supporting material**. It must be
 consistent with the MVP artefacts but is not load-bearing for the RFC ask.
@@ -82,11 +85,14 @@ comments and undermine credibility before anyone engages with the ideas.
 These fill the genuine content gaps in the RFC. They are what reviewers
 will actually engage with.
 
-14. [ ] **Write `docs/flow-spec.md` — the E2E state machine (centrepiece).** Walk through complete scenarios step-by-step: Alice boots → broadcasts beacon → Dave saves pubkey → Alice initiates X3DH → both compute shared secret → Alice sends text → RTS on 433 → CTS back → Dual-Burst on 868 → Relay 1 peels layer → Relay 2 peels layer → Dave decrypts → ACK path. Cover failure modes: hop down, TTL expiry, queue full, ratchet desync, message lost. Include a Mermaid state diagram for the ratchet advance and one for the dual-SPI interrupt handoff.
+14. [ ] **Write `docs/flow-spec.md` — the E2E state machine (centrepiece).** Walk through complete scenarios step-by-step: Alice boots → broadcasts beacon → Dave saves pubkey → Alice initiates X3DH → both compute shared secret → Alice sends text → RTS on 433 → CTS back → Dual-Burst on 868 → Relay 1 peels layer → Relay 2 peels layer → Dave decrypts → ACK path. Cover failure modes: hop down, TTL expiry, queue full, ratchet desync, message lost. Include a Mermaid state diagram for the ratchet advance and one for the dual-SPI interrupt handoff. **Include a dedicated Post-Compromise Security (PCS) section** — state the claim precisely, state what has not been proven, and make it the headline open question for reviewers.
 15. [ ] **Write `tools/generate_packet.py`.** ~100 lines of Python using `cryptography` or `pynacl`. Constructs a valid 112 B `gmp_868_data_frame` and a valid 104 B `gmp_433_beacon`, prints both as annotated hex dumps. Converts the `.ksy` files from "documentation" into "testable specification."
 16. [ ] **Write `docs/spi_arbitration.md`.** README §5 sends reviewers here; it currently 404s. Content: dual-SPI chip-select contention problem, proposed PIO state-machine solution, specific failure mode under review (dropped packets during simultaneous interrupts), minimum GPIO interrupt latency budget. This is the primary technical RFC question — deserves its own doc.
 17. [ ] **Sharpen the three RFC questions in `README.md` §7.** Replace broad "review the X" bullets with specific answerable questions. Each should be narrow enough that a reviewer can answer yes/no or identify a concrete failure mode. Draft examples live in `CLAUDE.md` under Phase 2 guidance.
 18. [ ] **Write `CONTRIBUTING.md`.** Scope: spec and `.ksy` changes only; no firmware PRs until `v1.0-draft` is locked. Include the Kaitai Struct Compiler command (`ksc --target cpp_stl specs/*.ksy`) for validating `.ksy` changes locally.
+19. [ ] **Review and expand `THREAT_MODEL.md`.** The existing file needs explicit adversary tiers: passive SIGINT, active jammer, compromised node, nation-state with SDR array. Add a clear out-of-scope section: global passive adversary doing cross-band traffic correlation, post-physical-capture attacks. `SECURITY.md` is a disclosure policy — it does not substitute for a threat model. Without this, security reviewers will spend their energy re-deriving the threat model instead of reviewing the spec.
+20. [ ] **Write `DESIGN_RATIONALE.md`.** Pre-empt the "why not X?" questions that will dominate the HN thread: why 112 B not 127 B, why AES-GCM not ChaCha20-Poly1305 (no AES-NI on RP2040 — address the trade-off honestly), why X25519 not Curve448, why 433/868 split not FHSS, why static Huffman not zlib, why 50-slot ring buffer with LRU eviction. Each answer should be one short paragraph: the constraint → the decision → the known weakness.
+21. [ ] **Write `docs/prior-art.md`.** Honest comparison table: Reticulum, Meshtastic, Briar, Berty — what GMP borrows, where it diverges, and why. Disarms the "why not just use X?" drive-by comment and positions GMP as a peer contribution rather than an uninformed reinvention.
 
 ---
 
@@ -94,10 +100,10 @@ will actually engage with.
 
 Cosmetic but important. Bad framing on HN kills good technical content.
 
-19. [ ] **Prepare the Hacker News post.** Use `docs/summary.md` as the base. "Ask HN" format is stronger than "Show HN" for an RFC. Title suggestion: *"Ask HN: Review our dual-band LoRa mesh protocol spec (zero-heap RP2040, Double Ratchet, Kaitai Structs)"*. Keep it genuinely seeking review, not announcing a product.
-20. [ ] **Identify target subreddits.** Primary: `r/embedded`, `r/crypto`, `r/netsec`, `r/amateurradio`. Secondary: `r/raspberry_pi`, `r/Meshtastic`, `r/LoRa`. Each needs a slightly different framing (embedded angle vs crypto angle vs RF angle). Draft the three framings separately.
-21. [ ] **Set up GitHub Discussions or a pinned Issue.** A single "RFC v1.0 — Feedback Thread" issue gives reviewers one place to post without scattered PRs. Pin it. Add `rfc`, `spec`, and `needs-review` labels.
-22. [ ] **Tag the release commit.** Before posting, tag as `v0.1-rfc` so the HN / Reddit posts have a stable anchor that won't drift as future commits land.
+22. [ ] **Prepare the Hacker News post.** Use `docs/summary.md` as the base. "Ask HN" format is stronger than "Show HN" for an RFC. Title suggestion: *"Ask HN: Review our dual-band LoRa mesh protocol spec (zero-heap RP2040, Double Ratchet, Kaitai Structs)"*. Keep it genuinely seeking review, not announcing a product.
+23. [ ] **Identify target subreddits.** Primary: `r/embedded`, `r/crypto`, `r/netsec`, `r/amateurradio`. Secondary: `r/raspberry_pi`, `r/Meshtastic`, `r/LoRa`. Each needs a slightly different framing (embedded angle vs crypto angle vs RF angle). Draft the three framings separately.
+24. [ ] **Set up GitHub Discussions or a pinned Issue.** A single "RFC v1.0 — Feedback Thread" issue gives reviewers one place to post without scattered PRs. Pin it. Add `rfc`, `spec`, and `needs-review` labels.
+25. [ ] **Tag the release commit.** Before posting, tag as `v0.1-rfc` so the HN / Reddit posts have a stable anchor that won't drift as future commits land.
 
 ---
 
@@ -106,12 +112,12 @@ Cosmetic but important. Bad framing on HN kills good technical content.
 The RFC period ends when the hard questions have satisfactory answers,
 not on a fixed calendar date.
 
-23. [ ] **Triage feedback.** Categorise into: spec bugs, architectural questions, implementation suggestions (deferred), off-topic.
-24. [ ] **Address spec bugs.** Follow-up commits on `main`. Each bug gets a named closing commit linking the issue.
-25. [ ] **Answer or revise on the architectural questions.** Primarily: SPI arbitration correctness, ratchet resilience under packet loss, key-ring sizing realism, the 112-byte lock trade-off.
-26. [ ] **Lock `v1.0-draft`.** Tag it. Update `SPECIFICATION.md` status line from `v1.0-draft` to `v1.0`. Announce spec freeze.
-27. [ ] **Begin firmware planning.** Scaffold the RP2040 C++ project in a separate repo or separate directory. This is a new phase of work outside the scope of this checklist.
+26. [ ] **Triage feedback.** Categorise into: spec bugs, architectural questions, implementation suggestions (deferred), off-topic.
+27. [ ] **Address spec bugs.** Follow-up commits on `main`. Each bug gets a named closing commit linking the issue.
+28. [ ] **Answer or revise on the architectural questions.** Primarily: SPI arbitration correctness, ratchet resilience under packet loss, key-ring sizing realism, the 112-byte lock trade-off.
+29. [ ] **Lock `v1.0-draft`.** Tag it. Update `SPECIFICATION.md` status line from `v1.0-draft` to `v1.0`. Announce spec freeze.
+30. [ ] **Begin firmware planning.** Scaffold the RP2040 C++ project in a separate repo or separate directory. This is a new phase of work outside the scope of this checklist.
 
 ---
 
-*Last updated: 2026-04-17. Phase 1 work pending. Phase 0 complete.*
+*Last updated: 2026-04-17. Phase 1 complete. Phase 2 in progress.*
