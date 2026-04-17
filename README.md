@@ -39,7 +39,7 @@ However, **all GMP protocol routing, queues, and cryptographic states are strict
 | --- | --- | --- | --- |
 | **.bss / .data** | Static System Globals | ~12.0 | RTOS/Scheduler overhead, hardware HAL states, and peripheral buffers. |
 | **Radio A (433MHz)** | Fixed Array (10 slots) | 2.5 | Queue for incoming/outgoing Diffie-Hellman handshakes (max 255 bytes each). |
-| **Radio B (836MHz)** | Fixed Array (20 slots) | 5.1 | Queue for AES-GCM data payloads. |
+| **Radio B (868MHz)** | Fixed Array (20 slots) | 5.1 | Queue for AES-GCM data payloads. |
 | **Crypto Key Ring** |  Fixed Ring Buffer (50 slots) | 25.0 | 50 pre-allocated Double Ratchet conversation states. The 51st overwrites the oldest (LRU). |
 | **Routing Table** | Fixed Struct Array (100 slots)| 5.0 | 100 known node IDs, public keys, and next-hop MAC addresses. |
 | **CPU Call Stack** | Core 0 & Core 1 Stacks | 16.0 | Pre-calculated stack depth to prevent overflow during crypto operations. |
@@ -57,15 +57,18 @@ This allows developers to auto-generate memory-safe parsing libraries in C++, Py
 
 ### 4.1 The Control Frame (433MHz)
 
-The Control Frame handles the X25519 Diffie-Hellman key exchanges required to advance the Double Ratchet.
+The Control Frame handles node discovery, the X25519 Diffie-Hellman key exchanges required to advance the Double Ratchet, and RTS/CTS air-traffic coordination. Strict 104-byte layout.
 
-* See: [`/specs/gmp_control_frame.ksy`](https://www.google.com/search?q=%23) (Link to file in repo)
+* See: [`/specs/gmp_433_beacon.ksy`](specs/gmp_433_beacon.ksy)
 
 ### 4.2 The Data Frame (868/915MHz)
 
-The Data Frame carries the actual encrypted payload. It uses a minimal routing header and an AES-GCM ciphertext authenticated by the current message key from the 433MHz ratchet.
+The Data Frame carries the actual encrypted payload. It uses a minimal 12-byte plaintext routing header wrapping a 100-byte AES-GCM ciphertext, authenticated by the current message key from the 433MHz ratchet. Strict 112-byte layout on the wire; decrypted core is 100 bytes.
 
-* See: [`/specs/gmp_data_frame.ksy`](https://www.google.com/search?q=%23) (Link to file in repo)
+* Outer shell: [`/specs/gmp_868_data_frame.ksy`](specs/gmp_868_data_frame.ksy)
+* Decrypted core: [`/specs/gmp_868_onion_core.ksy`](specs/gmp_868_onion_core.ksy)
+
+See [`SPECIFICATION.md`](SPECIFICATION.md) for the full wire specification and Time-on-Air table.
 
 ---
 
@@ -95,21 +98,9 @@ GMP implements a 3-hop Onion Routing protocol designed strictly for Delay Tolera
 3. **Out-of-Band Coordination:** To minimize ToA on the 868MHz data band, nodes use the 433MHz control band to negotiate burst-transmission windows. A node will hoard routed packets and transmit them in a single, high-speed Spreading Factor 7 (SF7) burst (a "lightning shuffle") to clear its static memory legally.
 4. **Queue Exhaustion:** If the `Egress_Queue` fills up (20/20 slots) due to duty cycle limits, the node broadcasts a "Choked" flag on 433MHz, instructing neighbors to route elsewhere.
 
-Section X: Asynchronous Onion Routing (DTN)
-GMP implements a 3-hop Onion Routing protocol designed strictly for Delay Tolerant Networking (DTN). To comply with Ofcom/FCC ISM band duty cycles (e.g., 1%), GMP does not guarantee real-time delivery.
-
-The Store-and-Forward Architecture:
-
-Static Egress Hoarding: When a node peels a layer of an Onion packet, the resulting ciphertext is placed into a pre-allocated static Egress_Queue (Maximum 20 packets).
-
-Duty Cycle State Machine: The RP2040 actively tracks its cumulative "Time on Air" (ToA). If the 1% limit is approached, the Egress_Queue pauses transmission. Packets are held in SRAM until the rolling hour window permits transmission.
-
-Out-of-Band Coordination: To minimize ToA on the 868MHz data band, nodes use the 433MHz control band to negotiate burst-transmission windows. A node will hoard multiple routed packets and transmit them in a single, high-speed Spreading Factor 7 (SF7) burst, acting as a "lightning shuffle" to clear its static memory queues legally.
-
-Queue Exhaustion: If the static Egress_Queue fills up (20/20 slots) due to duty cycle limits or network congestion, the node will broadcast a "Choked" flag on the 433MHz band, instructing neighboring nodes to route Onions elsewhere.
 ---
 
-## 6. Contributing & Governance
+## 7. Contributing & Governance
 
 We believe that protocol architecture must precede implementation. We are currently in the **RFC (Request for Comments)** phase.
 
