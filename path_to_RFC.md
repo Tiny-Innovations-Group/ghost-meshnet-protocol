@@ -73,7 +73,7 @@ comments and undermine credibility before anyone engages with the ideas.
 10. [x] **Sync `docs/encryption-ratchet.md` to 112 B canon.** Replace the 124 B / 248 B quotes throughout. Replace the outdated inline `gmp_433_beacon.ksy` snippet (no enums, no bit-packing) with a link to `/specs/gmp_433_beacon.ksy`.
 11. [x] **Fix `docs/oion-routing-draft.md`.** Rename file: `oion-routing-draft.md` → `onion-routing-draft.md`. Rewrite packet breakdown from 127 B to 112 B. Update the 79-byte compressed-text field to 77 bytes to match the canon.
 12. [x] **Resolve the compression ambiguity in `docs/the-message.md`.** §2 and §7 currently describe two mutually exclusive compression strategies on the same 77-byte field. Pick one as canonical, delete the other, OR explicitly document them as a two-stage pipeline (6-bit alphabet → Huffman on the 6-bit output).
-13. [ ] **Create `SECURITY.md`.** Referenced from `SPECIFICATION.md` footer. Minimum content: disclosure policy, contact address, scope (spec bugs / cryptographic weaknesses / timing attacks), response SLA.
+13. [x] **Create `SECURITY.md`.** Referenced from `SPECIFICATION.md` footer. Minimum content: disclosure policy, contact address, scope (spec bugs / cryptographic weaknesses / timing attacks), response SLA.
 
 ---
 
